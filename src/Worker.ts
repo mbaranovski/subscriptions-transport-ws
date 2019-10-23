@@ -27,7 +27,13 @@ class WebWorkerHandler {
           break;
         }
         case EVENT_TYPES.REQUEST: {
-          this.request(event.data.value);
+          console.log("MICHAL: Request to the WW: ", event.data.value);
+          this.client.send(event.data.value);
+          break;
+        }
+        case EVENT_TYPES.ONCLOSE_REQUEST: {
+          this.client.close();
+          this.client = null;
           break;
         }
         default: {
@@ -40,12 +46,25 @@ class WebWorkerHandler {
   }
 
   connect({url, wsProtocols}: any) {
-    if(this.connected) return console.log('WebWorker WS already connected')
+    if(this.client) return console.log('WebWorker WS already connected')
     this.client = new NativeWebSocket(url, wsProtocols);
 
     this.client.onopen = () => {
-      this.connected = true;
+    //  this.connected = true;
       this.worker.postMessage({type: EVENT_TYPES_SEND_WW.ONOPEN} as IWWPayloadFromWW)
+    }
+
+    this.client.onclose = () => {
+      this.worker.postMessage({type: EVENT_TYPES_SEND_WW.ONCLOSE} as IWWPayloadFromWW)
+    }
+
+    this.client.onerror = (err: Error) => {
+      this.worker.postMessage({type: EVENT_TYPES_SEND_WW.ONERROR, value: err} as IWWPayloadFromWW)
+    }
+
+    this.client.onmessage = ({ data }: {data: any}) => {
+      console.log("MICHAL: data", data);
+      this.worker.postMessage({type: EVENT_TYPES_SEND_WW.ONMESSAGE, value: data} as IWWPayloadFromWW)
     }
 
   }

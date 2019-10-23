@@ -103,6 +103,7 @@ export class SubscriptionClient {
   //Added
   private worker: Worker;
   private wwEventHandlers: Map<EVENT_TYPES_SEND_WW, Function> = new Map();
+  private workerClient: any;
 
 
   constructor(
@@ -148,6 +149,7 @@ export class SubscriptionClient {
     this.worker = new (Worker as any)();
     this.registerWWEvents();
     this.registerWWEventHandlers();
+    this.workerClient = null;
 
     if (!this.lazy) {
       this.connect();
@@ -156,16 +158,16 @@ export class SubscriptionClient {
   }
 
   public get status() {
-    if (this.client === null) {
+    if (this.workerClient === null) {
       return this.wsImpl.CLOSED;
     }
 
-    return this.client.readyState;
+    return this.workerClient.readyState;
   }
 
   public close(isForced = true, closedByUser = true) {
     this.clearInactivityTimeout();
-    if (this.client !== null) {
+    if (this.workerClient !== null) {
       this.closedByUser = closedByUser;
 
       if (isForced) {
@@ -176,8 +178,8 @@ export class SubscriptionClient {
         this.sendMessage(undefined, MessageTypes.GQL_CONNECTION_TERMINATE, null);
       }
 
-      this.client.close();
-      this.client = null;
+      this.worker.postMessage({type: EVENT_TYPES.ONCLOSE_REQUEST} as IWWPayloadFromClient);
+      this.workerClient = null;
       this.eventEmitter.emit('disconnected');
 
       if (!isForced) {
@@ -323,8 +325,7 @@ export class SubscriptionClient {
   }
 
   private executeOperation(options: OperationOptions, handler: (error: Error[], result?: any) => void): string {
-    if (this.client === null) {
-      this.connect();
+    if (this.workerClient === null) {
       this.wwConnect();
     }
 
@@ -477,6 +478,7 @@ export class SubscriptionClient {
 
   // send message, or queue it if connection is not open
   private sendMessageRaw(message: Object) {
+    console.log("MICHAL: message", message);
     switch (this.status) {
       case this.wsImpl.OPEN:
         let serializedMessage: string = JSON.stringify(message);
@@ -486,7 +488,7 @@ export class SubscriptionClient {
           this.eventEmitter.emit('error', new Error(`Message must be JSON-serializable. Got: ${message}`));
         }
 
-        this.client.send(serializedMessage);
+        this.worker.postMessage({type: EVENT_TYPES.REQUEST, value: serializedMessage} as IWWPayloadFromClient)
         break;
       case this.wsImpl.CONNECTING:
         this.unsentMessagesQueue.push(message);
@@ -570,8 +572,9 @@ export class SubscriptionClient {
   }
 
   private wwConnect() {
-    this.wwEventHandlers.set(EVENT_TYPES_SEND_WW.ONOPEN, (value: any) => {
-      if (this.status === this.wsImpl.OPEN) {
+    this.wwEventHandlers.set(EVENT_TYPES_SEND_WW.ONOPEN, async (value: any) => {
+      this.workerClient.readyState = this.wsImpl.OPEN;
+     // if (this.status === this.wsImpl.OPEN) {
         this.clearMaxConnectTimeout();
         this.closedByUser = false;
         this.eventEmitter.emit(this.reconnecting ? 'reconnecting' : 'connecting');
@@ -586,55 +589,32 @@ export class SubscriptionClient {
           this.sendMessage(undefined, MessageTypes.GQL_CONNECTION_ERROR, error);
           this.flushUnsentMessagesQueue();
         }
-      }
-    })
+     // }
+    });
 
-
-    this.worker.postMessage({type: EVENT_TYPES.CONNECT, value: {url: this.url, wsProtocols: this.wsProtocols}} as IWWPayloadFromClient);
-
-
-    //this.worker.postMessage({type:})
-  }
-
-  private connect() {
-    this.client = new this.wsImpl(this.url, this.wsProtocols);
-
-    this.checkMaxConnectTimeout();
-
-    this.client.onopen = async () => {
-      if (this.status === this.wsImpl.OPEN) {
-        this.clearMaxConnectTimeout();
-        this.closedByUser = false;
-        this.eventEmitter.emit(this.reconnecting ? 'reconnecting' : 'connecting');
-
-        try {
-          const connectionParams: ConnectionParams = await this.connectionParams();
-
-          // Send CONNECTION_INIT message, no need to wait for connection to success (reduce roundtrips)
-          this.sendMessage(undefined, MessageTypes.GQL_CONNECTION_INIT, connectionParams);
-          this.flushUnsentMessagesQueue();
-        } catch (error) {
-          this.sendMessage(undefined, MessageTypes.GQL_CONNECTION_ERROR, error);
-          this.flushUnsentMessagesQueue();
-        }
-      }
-    };
-
-    this.client.onclose = () => {
+    this.wwEventHandlers.set(EVENT_TYPES_SEND_WW.ONCLOSE, () => {
       if (!this.closedByUser) {
         this.close(false, false);
       }
-    };
+    });
 
-    this.client.onerror = (err: Error) => {
+    this.wwEventHandlers.set(EVENT_TYPES_SEND_WW.ONERROR, (err: Error) => {
       // Capture and ignore errors to prevent unhandled exceptions, wait for
       // onclose to fire before attempting a reconnect.
       this.eventEmitter.emit('error', err);
-    };
+    });
 
-    this.client.onmessage = ({ data }: {data: any}) => {
+    this.wwEventHandlers.set(EVENT_TYPES_SEND_WW.ONMESSAGE, (data: any) => {
       this.processReceivedData(data);
-    };
+    });
+
+    this.worker.postMessage({type: EVENT_TYPES.CONNECT, value: {url: this.url, wsProtocols: this.wsProtocols}} as IWWPayloadFromClient);
+    this.workerClient = {};
+    this.checkMaxConnectTimeout();
+  }
+
+  private connect() {
+
   }
 
   private processReceivedData(receivedData: any) {

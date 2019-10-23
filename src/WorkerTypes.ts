@@ -1,11 +1,16 @@
 export enum EVENT_TYPES {
   INIT,
   REQUEST,
-  CONNECT
+  CONNECT,
+  ONCLOSE_REQUEST,
 }
 
 export enum EVENT_TYPES_SEND_WW {
   ONOPEN,
+  ONCLOSE,
+  ONERROR,
+  ONMESSAGE,
+
 }
 
 export interface IWWPayloadFromClient {
