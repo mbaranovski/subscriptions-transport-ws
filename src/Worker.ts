@@ -63,7 +63,7 @@ class WebWorkerHandler {
     }
 
     this.client.onmessage = ({ data }: {data: any}) => {
-      console.log("MICHAL: data", data);
+     // / console.log("MICHAL: data", data);
       this.worker.postMessage({type: EVENT_TYPES_SEND_WW.ONMESSAGE, value: data} as IWWPayloadFromWW)
     }
 

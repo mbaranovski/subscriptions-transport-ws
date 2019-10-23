@@ -478,7 +478,7 @@ export class SubscriptionClient {
 
   // send message, or queue it if connection is not open
   private sendMessageRaw(message: Object) {
-    console.log("MICHAL: message", message);
+    console.log("MICHAL: message", message, this.status);
     switch (this.status) {
       case this.wsImpl.OPEN:
         let serializedMessage: string = JSON.stringify(message);
@@ -608,8 +608,10 @@ export class SubscriptionClient {
       this.processReceivedData(data);
     });
 
+    this.workerClient = {
+      readyState: this.wsImpl.CONNECTING
+    };
     this.worker.postMessage({type: EVENT_TYPES.CONNECT, value: {url: this.url, wsProtocols: this.wsProtocols}} as IWWPayloadFromClient);
-    this.workerClient = {};
     this.checkMaxConnectTimeout();
   }
 
