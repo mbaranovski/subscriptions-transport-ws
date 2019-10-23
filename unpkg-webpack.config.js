@@ -7,5 +7,13 @@ module.exports = {
     path: path.join(__dirname, '/browser'),
     filename: 'client.js',
     library: 'SubscriptionsTransportWs'
+  },
+  module: {
+    rules: [
+      {
+        test: /\.worker\.js$/,
+        use: { loader: 'worker-loader' }
+      }
+    ]
   }
 };

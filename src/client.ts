@@ -1,20 +1,23 @@
+import { EVENT_TYPES, EVENT_TYPES_SEND_WW, IWWEventFromWW, IWWPayloadFromClient } from "./WorkerTypes";
+import * as Backoff from "backo2";
+import { default as EventEmitterType, EventEmitter, ListenerFn } from "eventemitter3";
+import isString from "./utils/is-string";
+import isObject from "./utils/is-object";
+import { ExecutionResult } from "graphql/execution/execute";
+import { print } from "graphql/language/printer";
+import { DocumentNode } from "graphql/language/ast";
+import { getOperationAST } from "graphql/utilities/getOperationAST";
+import $$observable from "symbol-observable";
+
+import { GRAPHQL_WS } from "./protocol";
+import { WS_TIMEOUT } from "./defaults";
+import MessageTypes from "./message-types";
+
+import * as Worker from "worker-loader!./Worker";
+
 declare let window: any;
 const _global = typeof global !== 'undefined' ? global : (typeof window !== 'undefined' ? window : {});
 const NativeWebSocket = _global.WebSocket || _global.MozWebSocket;
-
-import * as Backoff from 'backo2';
-import { default as EventEmitterType, EventEmitter, ListenerFn } from 'eventemitter3';
-import isString from './utils/is-string';
-import isObject from './utils/is-object';
-import { ExecutionResult } from 'graphql/execution/execute';
-import { print } from 'graphql/language/printer';
-import { DocumentNode } from 'graphql/language/ast';
-import { getOperationAST } from 'graphql/utilities/getOperationAST';
-import $$observable from 'symbol-observable';
-
-import { GRAPHQL_WS } from './protocol';
-import { WS_TIMEOUT } from './defaults';
-import MessageTypes from './message-types';
 
 export interface Observer<T> {
   next?: (value: T) => void;
@@ -68,6 +71,8 @@ export interface ClientOptions {
   inactivityTimeout?: number;
 }
 
+
+
 export class SubscriptionClient {
   public client: any;
   public operations: Operations;
@@ -94,6 +99,11 @@ export class SubscriptionClient {
   private maxConnectTimeoutId: any;
   private middlewares: Middleware[];
   private maxConnectTimeGenerator: any;
+
+  //Added
+  private worker: Worker;
+  private wwEventHandlers: Map<EVENT_TYPES_SEND_WW, Function> = new Map();
+
 
   constructor(
     url: string,
@@ -135,9 +145,13 @@ export class SubscriptionClient {
     this.client = null;
     this.maxConnectTimeGenerator = this.createMaxConnectTimeGenerator();
     this.connectionParams = this.getConnectionParams(connectionParams);
+    this.worker = new (Worker as any)();
+    this.registerWWEvents();
+    this.registerWWEventHandlers();
 
     if (!this.lazy) {
       this.connect();
+      this.wwConnect();
     }
   }
 
@@ -311,6 +325,7 @@ export class SubscriptionClient {
   private executeOperation(options: OperationOptions, handler: (error: Error[], result?: any) => void): string {
     if (this.client === null) {
       this.connect();
+      this.wwConnect();
     }
 
     const opId = this.generateOperationId();
@@ -508,6 +523,7 @@ export class SubscriptionClient {
     const delay = this.backoff.duration();
     this.tryReconnectTimeoutId = setTimeout(() => {
       this.connect();
+      this.wwConnect();
     }, delay);
   }
 
@@ -539,6 +555,45 @@ export class SubscriptionClient {
         this.close(false, true);
       }
     }, this.maxConnectTimeGenerator.duration());
+  }
+
+  private getWWEventHandler = (type: EVENT_TYPES_SEND_WW) => this.wwEventHandlers.get(type);
+
+  private registerWWEvents() {
+    this.worker.onmessage = (event: IWWEventFromWW) => {
+      const handler = this.getWWEventHandler(event.data.type);
+      if(!handler) return console.error('No handler for msg from WW', event.data.type);
+      handler(event.data.value);
+    }
+  }
+  private registerWWEventHandlers() {
+  }
+
+  private wwConnect() {
+    this.wwEventHandlers.set(EVENT_TYPES_SEND_WW.ONOPEN, (value: any) => {
+      if (this.status === this.wsImpl.OPEN) {
+        this.clearMaxConnectTimeout();
+        this.closedByUser = false;
+        this.eventEmitter.emit(this.reconnecting ? 'reconnecting' : 'connecting');
+
+        try {
+          const connectionParams: ConnectionParams = await this.connectionParams();
+
+          // Send CONNECTION_INIT message, no need to wait for connection to success (reduce roundtrips)
+          this.sendMessage(undefined, MessageTypes.GQL_CONNECTION_INIT, connectionParams);
+          this.flushUnsentMessagesQueue();
+        } catch (error) {
+          this.sendMessage(undefined, MessageTypes.GQL_CONNECTION_ERROR, error);
+          this.flushUnsentMessagesQueue();
+        }
+      }
+    })
+
+
+    this.worker.postMessage({type: EVENT_TYPES.CONNECT, value: {url: this.url, wsProtocols: this.wsProtocols}} as IWWPayloadFromClient);
+
+
+    //this.worker.postMessage({type:})
   }
 
   private connect() {

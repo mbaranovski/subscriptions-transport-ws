@@ -9,6 +9,7 @@
     "url": "git+https://github.com/apollostack/subscriptions-transport-ws.git"
   },
   "dependencies": {
+    "@types/backo2": "^1.0.1",
     "backo2": "^1.0.2",
     "eventemitter3": "^3.1.0",
     "iterall": "^1.2.1",
@@ -53,7 +54,9 @@
     "sinon": "^6.1.4",
     "tslint": "^5.10.0",
     "typescript": "^2.9.1",
-    "webpack": "^3.1.0"
+    "webpack": "^4.41.2",
+    "webpack-cli": "^3.3.9",
+    "worker-loader": "^2.0.0"
   },
   "typings": "dist/index.d.ts",
   "typescript": {
