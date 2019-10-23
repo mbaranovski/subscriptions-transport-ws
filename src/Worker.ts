@@ -59,8 +59,10 @@ class WebWorkerHandler {
     }
 
     this.client.onerror = (err: Error) => {
-      this.worker.postMessage({type: EVENT_TYPES_SEND_WW.ONERROR, value: err} as IWWPayloadFromWW)
+      //Stringifying the error because we cannot serialize whole error instance.
+      this.worker.postMessage({type: EVENT_TYPES_SEND_WW.ONERROR, value: JSON.stringify(err)} as IWWPayloadFromWW)
     }
+
 
     this.client.onmessage = ({ data }: {data: any}) => {
      // / console.log("MICHAL: data", data);
