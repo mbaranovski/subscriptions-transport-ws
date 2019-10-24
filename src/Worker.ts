@@ -72,6 +72,7 @@ class WebWorkerHandler {
 
     this.client.onmessage = ({ data }: {data: any}) => {
       const parsedData = JSON.parse(data);
+      console.time(parsedData.id);
       //console.log("MICHAL: data", data);
       if(parsedData.type === "data") {
         const id = parsedData.id
@@ -84,6 +85,7 @@ class WebWorkerHandler {
         //console.log("MICHAL: this.buffer", this.buffer);
 
         if(data.includes("QueryFinished") || data.includes("FINISHED")) {
+          console.timeEnd(parsedData.id)
           console.log("MICHAL: 'FINISHED'", 'FINISHED');
           this.worker.postMessage({type: EVENT_TYPES_SEND_WW.ONMESSAGE, value: this.buffer[id]} as IWWPayloadFromWW)
         //  console.log("MICHAL: this.buffer[id] FINISHED", this.buffer[id]);

@@ -681,10 +681,11 @@ export class SubscriptionClient {
           parsedMessage.payload : {...parsedMessage.payload, errors: this.formatErrors(parsedMessage.payload.errors)};
         const operation = this.operations[opId];
        // setTimeout(() => {
-        if(this.iterator === 0) {
+       // if(this.iterator === 0) {
+        //  console.log("MICHAL: operation.handler", operation.handler);
           operation.handler(null, parsedPayload);
-          this.iterator++
-        }
+         // this.iterator++
+        //}
       //  }, 0);
         break;
 
