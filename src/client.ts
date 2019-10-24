@@ -631,7 +631,7 @@ export class SubscriptionClient {
     let opId: string;
 
     try {
-      parsedMessage = JSON.parse(receivedData);
+      parsedMessage = receivedData;
       opId = parsedMessage.id;
     } catch (e) {
       throw new Error(`Message must be JSON-parseable. Got: ${receivedData}`);
@@ -679,7 +679,13 @@ export class SubscriptionClient {
       case MessageTypes.GQL_DATA:
         const parsedPayload = !parsedMessage.payload.errors ?
           parsedMessage.payload : {...parsedMessage.payload, errors: this.formatErrors(parsedMessage.payload.errors)};
-        this.operations[opId].handler(null, parsedPayload);
+        const operation = this.operations[opId];
+       // setTimeout(() => {
+        if(this.iterator === 0) {
+          operation.handler(null, parsedPayload);
+          this.iterator++
+        }
+      //  }, 0);
         break;
 
       case MessageTypes.GQL_CONNECTION_KEEP_ALIVE:
@@ -701,6 +707,8 @@ export class SubscriptionClient {
         throw new Error('Invalid message type!');
     }
   }
+
+  private iterator = 0;
 
   private unsubscribe(opId: string) {
     if (this.operations[opId]) {

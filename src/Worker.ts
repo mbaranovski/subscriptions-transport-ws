@@ -12,7 +12,7 @@ class WebWorkerHandler {
   private worker: Worker;
   private client: typeof NativeWebSocket | null = null;
   private buffer: {[key: string]: any[]} = {};
-  private idValueRegexp = /\s*\"id\" *: *(\"([0-9]?)\"(|\s|)|\s*\{(.*?)\}(,|\s|))/;
+  private idValueRegexp = /\s*\"id\" *: *(\"([0-9]*?)\"(|\s|)|\s*\{(.*?)\}(,|\s|))/;
 
   constructor(ctx: any) {
     this.worker = ctx;
@@ -71,15 +71,16 @@ class WebWorkerHandler {
 
 
     this.client.onmessage = ({ data }: {data: any}) => {
+      const parsedData = JSON.parse(data);
       //console.log("MICHAL: data", data);
-      if(data.includes('"type":"data"')) {
-        const id = this.getIdValueFromJSON(data);
-        if(!id) return console.log('no Id found in JSON: ', data);
+      if(parsedData.type === "data") {
+        const id = parsedData.id
+        if(!id) return console.log('no Id found in JSON: ', parsedData);
         if(!this.buffer[id]) {
           this.buffer[id] = []
         }
 
-        this.buffer[id].push(data);
+        this.buffer[id].push(parsedData);
         //console.log("MICHAL: this.buffer", this.buffer);
 
         if(data.includes("QueryFinished") || data.includes("FINISHED")) {
@@ -89,8 +90,8 @@ class WebWorkerHandler {
           delete this.buffer[id];
         }
       } else {
-        console.log("MICHAL: 'different type'", 'different type', data);
-        this.worker.postMessage({type: EVENT_TYPES_SEND_WW.ONMESSAGE, value: data} as IWWPayloadFromWW)
+        console.log("MICHAL: 'different type'", 'different type', parsedData);
+        this.worker.postMessage({type: EVENT_TYPES_SEND_WW.ONMESSAGE, value: parsedData} as IWWPayloadFromWW)
       }
     }
 
