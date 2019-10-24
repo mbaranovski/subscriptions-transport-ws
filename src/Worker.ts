@@ -7,16 +7,22 @@ const _global = typeof global !== 'undefined' ? global : (typeof window !== 'und
 const NativeWebSocket = _global.WebSocket || _global.MozWebSocket;
 
 
-const GRAPHQL_ENDPOINT = "ws://localhost:4000/graphql";
 
 class WebWorkerHandler {
   private worker: Worker;
   private client: typeof NativeWebSocket | null = null;
-  private connected = false;
+  private buffer: {[key: string]: any[]} = {};
+  private idValueRegexp = /\s*\"id\" *: *(\"([0-9]?)\"(|\s|)|\s*\{(.*?)\}(,|\s|))/;
 
   constructor(ctx: any) {
     this.worker = ctx;
     this.registerListeners();
+  }
+
+  getIdValueFromJSON(json: string) {
+    const match = json.match(this.idValueRegexp);
+    if(!match) return null;
+    return match[0].replace(/"/g, '').split(":")[1];
   }
 
   registerListeners() {
@@ -27,7 +33,7 @@ class WebWorkerHandler {
           break;
         }
         case EVENT_TYPES.REQUEST: {
-          console.log("MICHAL: Request to the WW: ", event.data.value);
+         // console.log("MICHAL: Request to the WW: ", event.data.value);
           this.client.send(event.data.value);
           break;
         }
@@ -65,8 +71,27 @@ class WebWorkerHandler {
 
 
     this.client.onmessage = ({ data }: {data: any}) => {
-     // / console.log("MICHAL: data", data);
-      this.worker.postMessage({type: EVENT_TYPES_SEND_WW.ONMESSAGE, value: data} as IWWPayloadFromWW)
+      //console.log("MICHAL: data", data);
+      if(data.includes('"type":"data"')) {
+        const id = this.getIdValueFromJSON(data);
+        if(!id) return console.log('no Id found in JSON: ', data);
+        if(!this.buffer[id]) {
+          this.buffer[id] = []
+        }
+
+        this.buffer[id].push(data);
+        //console.log("MICHAL: this.buffer", this.buffer);
+
+        if(data.includes("QueryFinished") || data.includes("FINISHED")) {
+          console.log("MICHAL: 'FINISHED'", 'FINISHED');
+          this.worker.postMessage({type: EVENT_TYPES_SEND_WW.ONMESSAGE, value: this.buffer[id]} as IWWPayloadFromWW)
+        //  console.log("MICHAL: this.buffer[id] FINISHED", this.buffer[id]);
+          delete this.buffer[id];
+        }
+      } else {
+        console.log("MICHAL: 'different type'", 'different type', data);
+        this.worker.postMessage({type: EVENT_TYPES_SEND_WW.ONMESSAGE, value: data} as IWWPayloadFromWW)
+      }
     }
 
   }

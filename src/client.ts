@@ -478,7 +478,6 @@ export class SubscriptionClient {
 
   // send message, or queue it if connection is not open
   private sendMessageRaw(message: Object) {
-    console.log("MICHAL: message", message, this.status);
     switch (this.status) {
       case this.wsImpl.OPEN:
         let serializedMessage: string = JSON.stringify(message);
@@ -563,6 +562,7 @@ export class SubscriptionClient {
 
   private registerWWEvents() {
     this.worker.onmessage = (event: IWWEventFromWW) => {
+      console.log("MICHAL: 'onmessage'", 'onmessage');
       const handler = this.getWWEventHandler(event.data.type);
       if(!handler) return console.error('No handler for msg from WW', event.data.type);
       handler(event.data.value);
@@ -605,6 +605,13 @@ export class SubscriptionClient {
     });
 
     this.wwEventHandlers.set(EVENT_TYPES_SEND_WW.ONMESSAGE, (data: any) => {
+      console.log("MICHAL: 'Received MSG from WW'", 'Received MSG from WW');
+      if(Array.isArray(data)) {
+        console.time("processing");
+        data.forEach((data) => this.processReceivedData(data));
+        console.timeEnd("processing")
+      }
+      else
       this.processReceivedData(data);
     });
 
