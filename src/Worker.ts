@@ -11,18 +11,12 @@ const NativeWebSocket = _global.WebSocket || _global.MozWebSocket;
 class WebWorkerHandler {
   private worker: Worker;
   private client: typeof NativeWebSocket | null = null;
-  private buffer: {[key: string]: any[]} = {};
-  private idValueRegexp = /\s*\"id\" *: *(\"([0-9]*?)\"(|\s|)|\s*\{(.*?)\}(,|\s|))/;
+  private buffer: {[key: string]: { batch: any[]; opTypename: string; dataTypename: string, lastTimeBatched: number }} = {};
+  private batchedOperations: string[] = [];
 
   constructor(ctx: any) {
     this.worker = ctx;
     this.registerListeners();
-  }
-
-  getIdValueFromJSON(json: string) {
-    const match = json.match(this.idValueRegexp);
-    if(!match) return null;
-    return match[0].replace(/"/g, '').split(":")[1];
   }
 
   registerListeners() {
@@ -47,12 +41,11 @@ class WebWorkerHandler {
         }
       }
     }
-
-    //const d = new NativeWebSocket()
   }
 
-  connect({url, wsProtocols}: any) {
-    if(this.client) return console.log('WebWorker WS already connected')
+  connect({url, wsProtocols, batchedOperations}: any) {
+    if(this.client) return console.log('WebWorker WS already connected');
+    this.batchedOperations = batchedOperations;
     this.client = new NativeWebSocket(url, wsProtocols);
 
     this.client.onopen = () => {
@@ -69,48 +62,63 @@ class WebWorkerHandler {
       this.worker.postMessage({type: EVENT_TYPES_SEND_WW.ONERROR, value: JSON.stringify(err)} as IWWPayloadFromWW)
     }
 
+    let ops = 0;
 
     this.client.onmessage = ({ data }: {data: any}) => {
       const parsedData = JSON.parse(data);
-     // console.time(parsedData.id);
-      //console.log("MICHAL: data", data);
       if(parsedData.type === "data") {
-        const id = parsedData.id
+        const id = parsedData.id;
+        const opName = Object.keys(parsedData.payload.data)[0];
+
+        if(!this.batchedOperations.includes(opName)) return this.worker.postMessage({type: EVENT_TYPES_SEND_WW.ONMESSAGE, value: parsedData} as IWWPayloadFromWW)
+
         if(!id) return console.log('no Id found in JSON: ', parsedData);
         if(!this.buffer[id]) {
-          this.buffer[id] = []
+          this.buffer[id] = {
+            batch: [],
+            dataTypename: parsedData.payload.data[opName].data.__typename,
+            opTypename: parsedData.payload.data[opName].__typename,
+            lastTimeBatched: new Date().getTime()
+          }
         }
 
-        this.buffer[id].push(parsedData);
-        //console.log("MICHAL: this.buffer", this.buffer);
+        if(parsedData.payload.data[opName].data)
+          this.buffer[id].batch.push(parsedData.payload.data[opName].data.value);
 
-        if(data.includes("QueryFinished") || data.includes("FINISHED")) {
-         // console.timeEnd(parsedData.id)
-          console.log("MICHAL: 'FINISHED'", 'FINISHED');
-          this.worker.postMessage({type: EVENT_TYPES_SEND_WW.ONMESSAGE, value: this.buffer[id]} as IWWPayloadFromWW)
-        //  console.log("MICHAL: this.buffer[id] FINISHED", this.buffer[id]);
-          delete this.buffer[id];
+        if(parsedData.payload.data[opName].finished || (this.buffer[id].batch.length > 1000 && ((new Date().getTime() - this.buffer[id].lastTimeBatched) > 500))) {
+
+          //TODO: Rewrite it so that batched object does not depend on received data shape
+          const batched = {
+             ...parsedData,
+             payload: {
+               data: {
+                 [opName]: {
+                   data: {
+                     value: this.buffer[id].batch,
+                     __typename: this.buffer[id].dataTypename
+                   },
+                   finished: null,
+                   error: null,
+                   progress: null,
+                   __typename: this.buffer[id].opTypename
+                 },
+               }
+             }
+           };
+          this.worker.postMessage({type: EVENT_TYPES_SEND_WW.ONMESSAGE, value: batched} as IWWPayloadFromWW)
+          if(parsedData.payload.data[opName].finished) {
+            this.worker.postMessage({type: EVENT_TYPES_SEND_WW.ONMESSAGE, value: parsedData} as IWWPayloadFromWW)
+            delete this.buffer[id];
+          }
+          else {
+            this.buffer[id].lastTimeBatched = new Date().getTime();
+            this.buffer[id].batch = [];
+          }
         }
       } else {
-        console.log("MICHAL: 'different type'", 'different type', parsedData);
         this.worker.postMessage({type: EVENT_TYPES_SEND_WW.ONMESSAGE, value: parsedData} as IWWPayloadFromWW)
       }
     }
-
-  }
-
-  request(operation: any) {
-    if(!this.client) return;
-
-//    this.worker.postMessage("elo elo from worker");
-    // const dupa = new Observable(observer => {
-    //   this.promiseWorker.postMessage(operation)
-    //     .then(data => {
-    //       observer.next(data);
-    //       observer.complete();
-    //     })
-    //     .catch(observer.error.bind(observer));
-    // });
 
   }
 }
