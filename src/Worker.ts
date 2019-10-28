@@ -66,7 +66,11 @@ class WebWorkerHandler {
 
     this.client.onmessage = ({ data }: {data: any}) => {
       const parsedData = JSON.parse(data);
-      if(parsedData.type === "data") {
+      if(parsedData.type === "data" && parsedData.payload) {
+
+        if(parsedData.payload.errors)
+          return this.worker.postMessage({type: EVENT_TYPES_SEND_WW.ONMESSAGE, value: parsedData} as IWWPayloadFromWW);
+
         const id = parsedData.id;
         const opName = Object.keys(parsedData.payload.data)[0];
 

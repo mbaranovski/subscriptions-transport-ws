@@ -64,7 +64,9 @@ var WebWorkerHandler = (function () {
             var data = _a.data;
             var _b;
             var parsedData = JSON.parse(data);
-            if (parsedData.type === "data") {
+            if (parsedData.type === "data" && parsedData.payload) {
+                if (parsedData.payload.errors)
+                    return _this.worker.postMessage({ type: WorkerTypes_1.EVENT_TYPES_SEND_WW.ONMESSAGE, value: parsedData });
                 var id = parsedData.id;
                 var opName = Object.keys(parsedData.payload.data)[0];
                 if (!_this.batchedOperations.includes(opName))
