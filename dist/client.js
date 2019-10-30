@@ -62,7 +62,7 @@ var SubscriptionClient = (function () {
         var _this = this;
         this.wwEventHandlers = new Map();
         this.getWWEventHandler = function (type) { return _this.wwEventHandlers.get(type); };
-        var _a = (options || {}), _b = _a.connectionCallback, connectionCallback = _b === void 0 ? undefined : _b, _c = _a.connectionParams, connectionParams = _c === void 0 ? {} : _c, _d = _a.timeout, timeout = _d === void 0 ? defaults_1.WS_TIMEOUT : _d, _e = _a.reconnect, reconnect = _e === void 0 ? false : _e, _f = _a.reconnectionAttempts, reconnectionAttempts = _f === void 0 ? Infinity : _f, _g = _a.lazy, lazy = _g === void 0 ? false : _g, _h = _a.inactivityTimeout, inactivityTimeout = _h === void 0 ? 0 : _h, _j = _a.batchedOperations, batchedOperations = _j === void 0 ? [] : _j;
+        var _a = (options || {}), _b = _a.connectionCallback, connectionCallback = _b === void 0 ? undefined : _b, _c = _a.connectionParams, connectionParams = _c === void 0 ? {} : _c, _d = _a.timeout, timeout = _d === void 0 ? defaults_1.WS_TIMEOUT : _d, _e = _a.reconnect, reconnect = _e === void 0 ? false : _e, _f = _a.reconnectionAttempts, reconnectionAttempts = _f === void 0 ? Infinity : _f, _g = _a.lazy, lazy = _g === void 0 ? false : _g, _h = _a.inactivityTimeout, inactivityTimeout = _h === void 0 ? 0 : _h, _j = _a.batchedQuerySubscriptions, batchedQuerySubscriptions = _j === void 0 ? [] : _j;
         this.wsImpl = webSocketImpl || NativeWebSocket;
         if (!this.wsImpl) {
             throw new Error('Unable to find native implementation, or alternative implementation for WebSocket!');
@@ -90,7 +90,7 @@ var SubscriptionClient = (function () {
         this.registerWWEvents();
         this.registerWWEventHandlers();
         this.workerClient = null;
-        this.batchedOperations = batchedOperations;
+        this.batchedQuerySubscriptions = batchedQuerySubscriptions;
         if (!this.lazy) {
             this.connect();
             this.wwConnect();
@@ -494,7 +494,7 @@ var SubscriptionClient = (function () {
         this.workerClient = {
             readyState: this.wsImpl.CONNECTING
         };
-        this.worker.postMessage({ type: WorkerTypes_1.EVENT_TYPES.CONNECT, value: { url: this.url, batchedOperations: this.batchedOperations, wsProtocols: this.wsProtocols } });
+        this.worker.postMessage({ type: WorkerTypes_1.EVENT_TYPES.CONNECT, value: { url: this.url, batchedQuerySubscriptions: this.batchedQuerySubscriptions, wsProtocols: this.wsProtocols } });
         this.checkMaxConnectTimeout();
     };
     SubscriptionClient.prototype.connect = function () {

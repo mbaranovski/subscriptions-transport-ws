@@ -42,7 +42,7 @@ export interface ClientOptions {
     connectionCallback?: (error: Error[], result?: any) => void;
     lazy?: boolean;
     inactivityTimeout?: number;
-    batchedOperations?: string[];
+    batchedQuerySubscriptions?: string[];
 }
 export declare class SubscriptionClient {
     client: any;
@@ -73,7 +73,7 @@ export declare class SubscriptionClient {
     private worker;
     private wwEventHandlers;
     private workerClient;
-    private batchedOperations;
+    private batchedQuerySubscriptions;
     constructor(url: string, options?: ClientOptions, webSocketImpl?: any, webSocketProtocols?: string | string[]);
     readonly status: any;
     close(isForced?: boolean, closedByUser?: boolean): void;

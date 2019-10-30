@@ -16,7 +16,7 @@ var WebWorkerHandler = (function () {
     function WebWorkerHandler(ctx) {
         this.client = null;
         this.buffer = {};
-        this.batchedOperations = [];
+        this.batchedQuerySubscriptions = [];
         this.worker = ctx;
         this.registerListeners();
     }
@@ -45,10 +45,10 @@ var WebWorkerHandler = (function () {
     };
     WebWorkerHandler.prototype.connect = function (_a) {
         var _this = this;
-        var url = _a.url, wsProtocols = _a.wsProtocols, batchedOperations = _a.batchedOperations;
+        var url = _a.url, wsProtocols = _a.wsProtocols, batchedQuerySubscriptions = _a.batchedQuerySubscriptions;
         if (this.client)
             return console.log('WebWorker WS already connected');
-        this.batchedOperations = batchedOperations;
+        this.batchedQuerySubscriptions = batchedQuerySubscriptions;
         this.client = new NativeWebSocket(url, wsProtocols);
         this.client.onopen = function () {
             _this.worker.postMessage({ type: WorkerTypes_1.EVENT_TYPES_SEND_WW.ONOPEN });
@@ -59,60 +59,61 @@ var WebWorkerHandler = (function () {
         this.client.onerror = function (err) {
             _this.worker.postMessage({ type: WorkerTypes_1.EVENT_TYPES_SEND_WW.ONERROR, value: JSON.stringify(err) });
         };
-        var ops = 0;
         this.client.onmessage = function (_a) {
             var data = _a.data;
-            var _b;
             var parsedData = JSON.parse(data);
             if (parsedData.type === "data" && parsedData.payload) {
                 if (parsedData.payload.errors)
                     return _this.worker.postMessage({ type: WorkerTypes_1.EVENT_TYPES_SEND_WW.ONMESSAGE, value: parsedData });
-                var id = parsedData.id;
                 var opName = Object.keys(parsedData.payload.data)[0];
-                if (!_this.batchedOperations.includes(opName))
-                    return _this.worker.postMessage({ type: WorkerTypes_1.EVENT_TYPES_SEND_WW.ONMESSAGE, value: parsedData });
+                var id = parsedData.id;
                 if (!id)
                     return console.log('no Id found in JSON: ', parsedData);
-                if (!_this.buffer[id]) {
-                    _this.buffer[id] = {
-                        batch: [],
-                        dataTypename: parsedData.payload.data[opName].data.__typename,
-                        opTypename: parsedData.payload.data[opName].__typename,
-                        lastTimeBatched: new Date().getTime()
-                    };
-                }
-                if (parsedData.payload.data[opName].data)
-                    _this.buffer[id].batch.push(parsedData.payload.data[opName].data.value);
-                if (parsedData.payload.data[opName].finished || (_this.buffer[id].batch.length > 1000 && ((new Date().getTime() - _this.buffer[id].lastTimeBatched) > 500))) {
-                    var batched = __assign({}, parsedData, { payload: {
-                            data: (_b = {},
-                                _b[opName] = {
-                                    data: {
-                                        value: _this.buffer[id].batch,
-                                        __typename: _this.buffer[id].dataTypename
-                                    },
-                                    finished: null,
-                                    error: null,
-                                    progress: null,
-                                    __typename: _this.buffer[id].opTypename
-                                },
-                                _b)
-                        } });
-                    _this.worker.postMessage({ type: WorkerTypes_1.EVENT_TYPES_SEND_WW.ONMESSAGE, value: batched });
-                    if (parsedData.payload.data[opName].finished) {
-                        _this.worker.postMessage({ type: WorkerTypes_1.EVENT_TYPES_SEND_WW.ONMESSAGE, value: parsedData });
-                        delete _this.buffer[id];
-                    }
-                    else {
-                        _this.buffer[id].lastTimeBatched = new Date().getTime();
-                        _this.buffer[id].batch = [];
-                    }
-                }
+                if (_this.batchedQuerySubscriptions.includes(opName))
+                    return _this.handleBatchedQueries(parsedData, opName, id);
+                else
+                    return _this.worker.postMessage({ type: WorkerTypes_1.EVENT_TYPES_SEND_WW.ONMESSAGE, value: parsedData });
             }
             else {
                 _this.worker.postMessage({ type: WorkerTypes_1.EVENT_TYPES_SEND_WW.ONMESSAGE, value: parsedData });
             }
         };
+    };
+    WebWorkerHandler.prototype.handleBatchedQueries = function (parsedData, opName, id) {
+        var _a;
+        var operation = parsedData.payload.data[opName];
+        var finishedMsg = operation.finished;
+        var dataMsg = operation.data;
+        var isEventType = !finishedMsg && !dataMsg;
+        if (finishedMsg && !this.buffer[id])
+            return this.worker.postMessage({ type: WorkerTypes_1.EVENT_TYPES_SEND_WW.ONMESSAGE, value: parsedData });
+        if (!this.buffer[id]) {
+            this.buffer[id] = {
+                batch: [],
+                lastTimeBatched: new Date().getTime()
+            };
+        }
+        if (!finishedMsg)
+            this.buffer[id].batch.push(operation);
+        if (finishedMsg ||
+            (this.buffer[id].batch.length > 500 && ((new Date().getTime() - this.buffer[id].lastTimeBatched) > 500)) ||
+            (isEventType && ((new Date().getTime() - this.buffer[id].lastTimeBatched) > 500)) ||
+            (isEventType && this.buffer[id].batch.length <= 3 && ((new Date().getTime() - this.buffer[id].lastTimeBatched) > 100))) {
+            var batched = __assign({}, parsedData, { payload: {
+                    data: (_a = {},
+                        _a[opName] = this.buffer[id].batch,
+                        _a)
+                } });
+            this.worker.postMessage({ type: WorkerTypes_1.EVENT_TYPES_SEND_WW.ONMESSAGE, value: batched });
+            if (finishedMsg) {
+                this.worker.postMessage({ type: WorkerTypes_1.EVENT_TYPES_SEND_WW.ONMESSAGE, value: parsedData });
+                delete this.buffer[id];
+            }
+            else {
+                this.buffer[id].lastTimeBatched = new Date().getTime();
+                this.buffer[id].batch = [];
+            }
+        }
     };
     return WebWorkerHandler;
 }());

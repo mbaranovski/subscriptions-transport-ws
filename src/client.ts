@@ -69,7 +69,7 @@ export interface ClientOptions {
   connectionCallback?: (error: Error[], result?: any) => void;
   lazy?: boolean;
   inactivityTimeout?: number;
-  batchedOperations?: string[]
+  batchedQuerySubscriptions?: string[];
 }
 
 
@@ -105,7 +105,7 @@ export class SubscriptionClient {
   private worker: Worker;
   private wwEventHandlers: Map<EVENT_TYPES_SEND_WW, Function> = new Map();
   private workerClient: any;
-  private batchedOperations: string[];
+  private batchedQuerySubscriptions: string[];
 
 
   constructor(
@@ -122,7 +122,7 @@ export class SubscriptionClient {
       reconnectionAttempts = Infinity,
       lazy = false,
       inactivityTimeout = 0,
-      batchedOperations = []
+      batchedQuerySubscriptions = [],
     } = (options || {});
 
     this.wsImpl = webSocketImpl || NativeWebSocket;
@@ -153,7 +153,7 @@ export class SubscriptionClient {
     this.registerWWEvents();
     this.registerWWEventHandlers();
     this.workerClient = null;
-    this.batchedOperations = batchedOperations;
+    this.batchedQuerySubscriptions = batchedQuerySubscriptions;
 
     if (!this.lazy) {
       this.connect();
@@ -620,7 +620,7 @@ export class SubscriptionClient {
     this.workerClient = {
       readyState: this.wsImpl.CONNECTING
     };
-    this.worker.postMessage({type: EVENT_TYPES.CONNECT, value: {url: this.url, batchedOperations: this.batchedOperations, wsProtocols: this.wsProtocols}} as IWWPayloadFromClient);
+    this.worker.postMessage({type: EVENT_TYPES.CONNECT, value: {url: this.url, batchedQuerySubscriptions: this.batchedQuerySubscriptions, wsProtocols: this.wsProtocols}} as IWWPayloadFromClient);
     this.checkMaxConnectTimeout();
   }
 
